@@ -31,16 +31,36 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return SELECT_ROLE
 
 async def select_role(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    code = (update.message.text or "").strip()
+    text = (update.message.text or "").strip()
     user = update.effective_user
     
-    # Claves fijadas directamente en el código para evitar fallos de lectura
+    # Procesar clics del menú de administrador si ya se inició sesión
+    if text == "📦 Ver tabla de inventario":
+        await update.message.reply_text("📊 Consultando inventario general en la base de datos...")
+        return ADMIN_MENU
+    elif text == "🛠️ Gestionar productos":
+        await update.message.reply_text("🛠️ Abriendo el módulo de gestión de productos...")
+        return ADMIN_MENU
+    elif text == "💰 Control de deudores general":
+        await update.message.reply_text("🔍 Buscando cuentas por cobrar activas...")
+        return ADMIN_MENU
+    elif text == "💸 Registrar pagos administrativos":
+        await update.message.reply_text("🧾 Ingresa la descripción del pago administrativo:")
+        return ADMIN_REGISTRO_PAGOS
+    elif text == "🗂️ Módulo de reportes":
+        await update.message.reply_text("📅 Selecciona el tipo de reporte que deseas generar:")
+        return REPOPT_TIPO
+    elif text == "🔙 Salir":
+        await update.message.reply_text("👋 Cerraste sesión. Escribe /start para volver a ingresar.")
+        return ConversationHandler.END
+
+    # Validación de contraseñas de inicio
     CLAVE_ADMIN = "AlejoAbella"
     CLAVE_EMPLEADO = "Laura"
     
-    if code == CLAVE_ADMIN:
+    if text == CLAVE_ADMIN:
         rol = "admin"
-    elif code == CLAVE_EMPLEADO:
+    elif text == CLAVE_EMPLEADO:
         rol = "empleado"
     else:
         await update.message.reply_text("❌ Código incorrecto. Intenta nuevamente:")
@@ -69,6 +89,9 @@ async def employee_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     if choice == "🔙 Volver":
         await _show_main_menu(update, context, "empleado")
         return EMPLOYEE_MENU
+    if choice == "🛒 Registrar pedido/venta":
+        await update.message.reply_text("👤 *Nombre del cliente*:")
+        return VENTA_CLIENTE
     if choice == "📦 Consultar inventario":
         await update.message.reply_text("📦 Consultando inventario...")
         return EMPLOYEE_MENU

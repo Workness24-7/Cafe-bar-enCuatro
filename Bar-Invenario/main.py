@@ -9,6 +9,10 @@ from bot_handlers import (
 
 logging.basicConfig(level=logging.INFO)
 
+async def admin_router(update, context):
+    # Redirige de forma segura las opciones de administrador hacia la lógica de validación
+    return await select_role(update, context)
+
 def main():
     TOKEN = os.getenv("TOKEN_TELEGRAM") or os.getenv("TOKEN")
     if not TOKEN:
@@ -16,34 +20,27 @@ def main():
 
     application = Application.builder().token(TOKEN).build()
 
-    # MAPA DE NAVEGACIÓN COMPLETO Y PROFESIONAL
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            # Estado 0: Validación de contraseñas
+            # Estado de inicio para contraseñas
             SELECT_ROLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, select_role)],
             
-            # Estado 1: Menú de Administrador (Escucha y procesa los botones del patrón)
-            ADMIN_MENU: [MessageHandler(filters.TEXT & ~filters.COMMAND, select_role)], 
-            
-            # Estado 2: Menú de Empleado (Escucha y procesa los botones de la empleada)
+            # Estados independientes para evitar que las funciones choquen entre sí
+            ADMIN_MENU: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_router)],
             EMPLOYEE_MENU: [MessageHandler(filters.TEXT & ~filters.COMMAND, employee_menu)],
             
-            # Sub-estados para los flujos del bar (Se activan al tocar los botones)
+            # Sub-estados de los flujos secundarios
             VENTA_CLIENTE: [MessageHandler(filters.TEXT & ~filters.COMMAND, employee_menu)],
-            ADMIN_REGISTRO_PAGOS: [MessageHandler(filters.TEXT & ~filters.COMMAND, select_role)],
-            REPOPT_TIPO: [MessageHandler(filters.TEXT & ~filters.COMMAND, select_role)]
+            ADMIN_REGISTRO_PAGOS: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_router)],
+            REPOPT_TIPO: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_router)]
         },
         fallbacks=[CommandHandler("start", start)],
         allow_reentry=True
     )
 
     application.add_handler(conv_handler)
-    
-    # Manejador de respaldo para asegurar que los menús siempre respondan ante el texto de los botones
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, select_role))
-    
-    print("🚀 El Bot del Bar se ha encendido con el mapa completo...")
+    print("🚀 Router de navegación activado en el sistema...")
     application.run_polling()
 
 if __name__ == '__main__':
