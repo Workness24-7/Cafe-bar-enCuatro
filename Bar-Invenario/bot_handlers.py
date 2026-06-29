@@ -1,6 +1,7 @@
 # bot_handlers.py
 import logging
 import re
+import sqlite3
 from datetime import datetime
 import datetime
 from typing import List
@@ -142,9 +143,7 @@ async def select_role(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
             "❌ Código incorrecto. Intenta nuevamente o contacta al administrador."
         )
         return SELECT_ROLE
-    # Remove any previous entry for this telegram id (allows role switch)
     # Clean up any old SQLite user entry – not needed for PostgreSQL.
-    # Previously the code attempted to open a SQLite DB (DB_PATH) which caused syntax errors.
     # The user record is now managed via PostgreSQL via `create_user`.
 
     nombre = f"{user.first_name or ''} {user.last_name or ''}".strip() or "Sin nombre"
@@ -687,18 +686,24 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         return ADMIN_MENU
 
     if choice == "📦 Ver tabla de inventario":
-        inv = list_inventory()
-        if not inv:
-            await update.message.reply_text("🚫 Inventario vacío.")
-        else:
-            lines = ["*Inventario completo:*"]
-            for i in inv:
-                lines.append(
-                    f"{i['nombre_producto']}: {i['cantidad']} uds "
-                    f"({_fmt_money(i['precio_base'])} c/u) → "
-                    f"{_fmt_money(i['valor_total_stock'])}"
-                )
-            await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+        # Mostrar inventario o indicar que está vacío
+        try:
+            inv = list_inventory()
+            if not inv:
+                await update.message.reply_text("🚫 Inventario vacío.")
+            else:
+                lines = ["*Inventario completo:*"]
+                for i in inv:
+                    lines.append(
+                        f"{i['nombre_producto']}: {i['cantidad']} uds "
+                        f"({_fmt_money(i['precio_base'])} c/u) → "
+                        f"{_fmt_money(i['valor_total_stock'])}"
+                    )
+                await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+        except Exception as e:
+            log.exception("Error al obtener inventario")
+            await update.message.reply_text(f"❌ Error al obtener inventario: {e}")
+        # Mantener estado admin
         return ADMIN_MENU
 
     if choice == "🛠️ Gestionar productos":
