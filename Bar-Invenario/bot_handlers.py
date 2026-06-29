@@ -690,6 +690,10 @@ async def registrar_gasto_monto(update: Update, context: ContextTypes.DEFAULT_TY
 #  ADMIN MENU dispatcher
 # ----------------------------------------------------------------------
 async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    # Asegurarnos de que el usuario sigue autenticado como admin
+    if not context.user_data.get("role"):
+        await update.message.reply_text("⚠️ No estás autenticado. Usa /start para iniciar sesión.")
+        return SELECT_ROLE
     choice = (update.message.text or "").strip()
     # Volver al menú principal de administrador
     if choice == "🔙 Volver":
