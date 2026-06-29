@@ -28,16 +28,21 @@ def _mk_keyboard(options):
     return ReplyKeyboardMarkup([[KeyboardButton(opt)] for opt in options], resize_keyboard=True, one_time_keyboard=True)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("👋 ¡Bienvenido al sistema del Bar!\nPor favor, ingresa tu código de acceso único (Empleada o Patrón):")
+    await update.message.reply_text("👋 ¡Bienvenido a *Cafe Bar en Cuatro*!\n\nPara continuar, por favor ingresa tu código de acceso único (Empleada o Patrón):", parse_mode="Markdown")
     return SELECT_ROLE
 
 async def select_role(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     code = (update.message.text or "").strip()
     user = update.effective_user
-    if code == "AdminBar2026":
-        rol = "admin"
-    elif code == "StaffBar2026":
-        rol = "empleado"
+    
+    # Intenta leer tus claves desde Railway, si no existen usa las de respaldo
+    CLAVE_ADMIN = os.getenv("CLAVE_ACCESO_ADMIN", "AdminBar2026")
+    CLAVE_EMPLEADO = os.getenv("CLAVE_ACCESO_EMPLEADO", "StaffBar2026")
+    
+    if code == CLAVE_ADMIN:
+        rol = "AlejoAbella"
+    elif code == CLAVE_EMPLEADO:
+        rol = "Laura"
     else:
         await update.message.reply_text("❌ Código incorrecto. Intenta nuevamente:")
         return SELECT_ROLE
