@@ -7,7 +7,6 @@ from telegram.ext import ContextTypes, ConversationHandler
 
 log = logging.getLogger(__name__)
 
-# Definición limpia de todos los estados requeridos
 (
     SELECT_ROLE, ADMIN_MENU, EMPLOYEE_MENU, VENTA_CLIENTE, VENTA_PRODUCTO,
     VENTA_PRODUCTO_SELECTION, VENTA_PRODUCTO_NEW_NAME, VENTA_PRODUCTO_NEW_CANTIDAD,
@@ -35,14 +34,14 @@ async def select_role(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     code = (update.message.text or "").strip()
     user = update.effective_user
     
-    # Intenta leer tus claves desde Railway, si no existen usa las de respaldo
-    CLAVE_ADMIN = os.getenv("CLAVE_ACCESO_ADMIN", "AdminBar2026")
-    CLAVE_EMPLEADO = os.getenv("CLAVE_ACCESO_EMPLEADO", "StaffBar2026")
+    # Claves fijadas directamente en el código para evitar fallos de lectura
+    CLAVE_ADMIN = "AlejoAbella"
+    CLAVE_EMPLEADO = "Laura"
     
     if code == CLAVE_ADMIN:
-        rol = "AlejoAbella"
+        rol = "admin"
     elif code == CLAVE_EMPLEADO:
-        rol = "Laura"
+        rol = "empleado"
     else:
         await update.message.reply_text("❌ Código incorrecto. Intenta nuevamente:")
         return SELECT_ROLE
