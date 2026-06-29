@@ -99,16 +99,18 @@ def add_product(
     precio_base: float,
     precio_minimo_venta: float,
 ) -> None:
-    valor_total = cantidad * precio_base
+    """Inserta un nuevo producto. El campo `valor_total_stock` es una columna generada en la base de datos, por lo que no se incluye en la sentencia INSERT.
+
+    La base de datos calculará automáticamente `valor_total_stock = cantidad * precio_base`.
+    """
     with _connect() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO inventario (nombre_producto, cantidad, precio_base,
-                                       precio_minimo_venta, valor_total_stock)
-                VALUES (%s,%s,%s,%s,%s)
+                INSERT INTO inventario (nombre_producto, cantidad, precio_base, precio_minimo_venta)
+                VALUES (%s, %s, %s, %s)
                 """,
-                (nombre_producto, cantidad, precio_base, precio_minimo_venta, valor_total),
+                (nombre_producto, cantidad, precio_base, precio_minimo_venta),
             )
         conn.commit()
 
