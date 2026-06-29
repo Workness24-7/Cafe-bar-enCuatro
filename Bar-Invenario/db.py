@@ -1,5 +1,8 @@
 # db.py
-import sqlite3
+import os
+import psycopg2
+from urllib.parse import urlparse
+from psycopg2.extras import RealDictCursor
 import datetime
 from typing import List, Dict, Any
 
@@ -17,94 +20,57 @@ def _fmt_money(value: float) -> str:
 # ----------------------------------------------------------------------
 #  Database connection (simple synchronous wrapper)
 # ----------------------------------------------------------------------
-def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES)
-    conn.row_factory = sqlite3.Row
+def _connect():
+    """Create a psycopg2 connection using the DATABASE_URL environment variable.
+    Returns a connection object that can be used as a context manager.
+    """
+    url = os.getenv('DATABASE_URL')
+    if not url:
+        raise RuntimeError('DATABASE_URL no está configurada')
+    result = urlparse(url)
+    conn = psycopg2.connect(
+        dbname=result.path.lstrip('/'),
+        user=result.username,
+        password=result.password,
+        host=result.hostname,
+        port=result.port,
+    )
+    # Autocommit disabled so we can manage transactions manually (like SQLite)
+    conn.autocommit = False
     return conn
 
 # ----------------------------------------------------------------------
 #  Initialise all tables (called once at startup)
 # ----------------------------------------------------------------------
 def init_db() -> None:
-    with _connect() as conn:
-        cur = conn.cursor()
-        # usuarios
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS usuarios (
-                id_telegram INTEGER PRIMARY KEY,
-                nombre TEXT NOT NULL,
-                rol TEXT NOT NULL CHECK (rol IN ('admin','empleado'))
-            )
-            """
-        )
-        # inventario
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS inventario (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nombre_producto TEXT NOT NULL UNIQUE,
-                cantidad INTEGER NOT NULL CHECK (cantidad >= 0),
-                precio_base REAL NOT NULL CHECK (precio_base >= 0),
-                precio_minimo_venta REAL NOT NULL CHECK (precio_minimo_venta >= 0),
-                valor_total_stock REAL NOT NULL
-            )
-            """
-        )
-        # ventas_pedidos
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS ventas_pedidos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                cliente TEXT NOT NULL,
-                producto TEXT NOT NULL,
-                cantidad INTEGER NOT NULL CHECK (cantidad > 0),
-                precio_vendido REAL NOT NULL CHECK (precio_vendido >= 0),
-                subtotal REAL NOT NULL,
-                estado_pago TEXT NOT NULL CHECK (estado_pago IN ('DEBE','PAGO','PARCIAL')),
-                saldo_pendiente REAL NOT NULL,
-                fecha TIMESTAMP NOT NULL
-            )
-            """
-        )
-        # Añadir columna metodo_pago si no existe
-        try:
-            cur.execute("ALTER TABLE ventas_pedidos ADD COLUMN metodo_pago TEXT NOT NULL DEFAULT 'Desconocido'")
-        except Exception:
-            pass
-        # gastos
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS gastos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tipo TEXT NOT NULL CHECK (tipo IN ('operativo_bar','nomina','servicios','externo')),
-                descripcion TEXT NOT NULL,
-                monto REAL NOT NULL CHECK (monto >= 0),
-                fecha TIMESTAMP NOT NULL
-            )
-            """
-        )
-        conn.commit()
+    """Inicialización de la base de datos.
+    En entornos PostgreSQL la estructura se crea fuera del código (por ejemplo, en Supabase).
+    Esta función se mantiene por compatibilidad, pero no ejecuta ninguna sentencia.
+    """
+    # No se necesita crear tablas en PostgreSQL si ya existen.
+    return
 
 # ----------------------------------------------------------------------
 #  USER functions
 # ----------------------------------------------------------------------
 def get_user(id_telegram: int) -> Dict[str, Any] | None:
     with _connect() as conn:
-        cur = conn.execute(
-            "SELECT id_telegram, nombre, rol FROM usuarios WHERE id_telegram = ?",
-            (id_telegram,),
-        )
-        row = cur.fetchone()
-        return dict(row) if row else None
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT id_telegram, nombre, rol FROM usuarios WHERE id_telegram = %s",
+                (id_telegram,)
+            )
+            row = cur.fetchone()
+            return dict(row) if row else None
 
 
 def create_user(id_telegram: int, nombre: str, rol: str) -> None:
     with _connect() as conn:
-        conn.execute(
-            "INSERT INTO usuarios (id_telegram, nombre, rol) VALUES (?,?,?)",
-            (id_telegram, nombre, rol),
-        )
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO usuarios (id_telegram, nombre, rol) VALUES (%s,%s,%s)",
+                (id_telegram, nombre, rol)
+            )
         conn.commit()
 
 # ----------------------------------------------------------------------
@@ -118,74 +84,80 @@ def add_product(
 ) -> None:
     valor_total = cantidad * precio_base
     with _connect() as conn:
-        conn.execute(
-            """
-            INSERT INTO inventario (nombre_producto, cantidad, precio_base,
-                                   precio_minimo_venta, valor_total_stock)
-            VALUES (?,?,?,?,?)
-            """,
-            (nombre_producto, cantidad, precio_base, precio_minimo_venta, valor_total),
-        )
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO inventario (nombre_producto, cantidad, precio_base,
+                                       precio_minimo_venta, valor_total_stock)
+                VALUES (%s,%s,%s,%s,%s)
+                """,
+                (nombre_producto, cantidad, precio_base, precio_minimo_venta, valor_total),
+            )
         conn.commit()
 
 
 def remove_product(nombre_producto: str) -> None:
     with _connect() as conn:
-        conn.execute(
-            "DELETE FROM inventario WHERE nombre_producto = ?",
-            (nombre_producto,),
-        )
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM inventario WHERE nombre_producto = %s",
+                (nombre_producto,)
+            )
         conn.commit()
 
 
 def get_product(nombre_producto: str) -> Dict[str, Any] | None:
     with _connect() as conn:
-        cur = conn.execute(
-            "SELECT * FROM inventario WHERE nombre_producto = ?",
-            (nombre_producto,),
-        )
-        row = cur.fetchone()
-        return dict(row) if row else None
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT * FROM inventario WHERE nombre_producto = %s",
+                (nombre_producto,)
+            )
+            row = cur.fetchone()
+            return dict(row) if row else None
 
 
 def update_stock(nombre_producto: str, delta: int) -> None:
     """Increase (+) or decrease (-) stock and recalc valor_total_stock."""
     with _connect() as conn:
-        cur = conn.execute(
-            "SELECT cantidad, precio_base FROM inventario WHERE nombre_producto = ?",
-            (nombre_producto,),
-        )
-        row = cur.fetchone()
-        if not row:
-            raise ValueError(f"Producto '{nombre_producto}' no encontrado.")
-        nueva_cantidad = row["cantidad"] + delta
-        if nueva_cantidad < 0:
-            raise ValueError(
-                f"No hay suficiente stock de '{nombre_producto}'. Disponible: {row['cantidad']}"
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT cantidad, precio_base FROM inventario WHERE nombre_producto = %s",
+                (nombre_producto,)
             )
-        nuevo_valor = nueva_cantidad * row["precio_base"]
-        conn.execute(
-            """
-            UPDATE inventario
-            SET cantidad = ?, valor_total_stock = ?
-            WHERE nombre_producto = ?
-            """,
-            (nueva_cantidad, nuevo_valor, nombre_producto),
-        )
+            row = cur.fetchone()
+            if not row:
+                raise ValueError(f"Producto '{nombre_producto}' no encontrado.")
+            nueva_cantidad = row["cantidad"] + delta
+            if nueva_cantidad < 0:
+                raise ValueError(
+                    f"No hay suficiente stock de '{nombre_producto}'. Disponible: {row['cantidad']}"
+                )
+            nuevo_valor = nueva_cantidad * row["precio_base"]
+            # Update row
+            cur.execute(
+                """
+                UPDATE inventario
+                SET cantidad = %s, valor_total_stock = %s
+                WHERE nombre_producto = %s
+                """,
+                (nueva_cantidad, nuevo_valor, nombre_producto)
+            )
         conn.commit()
 
 
 def list_inventory() -> List[Dict[str, Any]]:
     with _connect() as conn:
-        cur = conn.execute(
-            """
-            SELECT nombre_producto, cantidad, precio_base,
-                   precio_minimo_venta, valor_total_stock
-            FROM inventario
-            ORDER BY nombre_producto
-            """
-        )
-        return [dict(r) for r in cur.fetchall()]
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT nombre_producto, cantidad, precio_base,
+                       precio_minimo_venta, valor_total_stock
+                FROM inventario
+                ORDER BY nombre_producto
+                """
+            )
+            return [dict(r) for r in cur.fetchall()]
 
 # ----------------------------------------------------------------------
 #  SALES functions
@@ -200,125 +172,120 @@ def record_sale(
     abono: float = 0.0,
 ) -> None:
     """Registra una venta y actualiza el stock en una única transacción.
-    Evita abrir conexiones SQLite anidadas que provocan el error
-    "database is locked".
     """
     with _connect() as conn:
-        # Obtener datos del producto dentro de la misma conexión
-        cur = conn.execute(
-            "SELECT cantidad, precio_base, precio_minimo_venta FROM inventario WHERE nombre_producto = ?",
-            (producto,)
-        )
-        row = cur.fetchone()
-        if not row:
-            raise ValueError(f"Producto '{producto}' no existe.")
-        stock_actual, precio_base, precio_minimo = row["cantidad"], row["precio_base"], row["precio_minimo_venta"]
-        if cantidad > stock_actual:
-            raise ValueError(
-                f"Stock insuficiente: {stock_actual} disponible, se solicitaron {cantidad}."
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            # Obtener datos del producto dentro de la misma conexión
+            cur.execute(
+                "SELECT cantidad, precio_base, precio_minimo_venta FROM inventario WHERE nombre_producto = %s",
+                (producto,)
             )
-        if precio_vendido < precio_minimo:
-            raise ValueError(
-                f"Precio de venta menor al mínimo permitido ({_fmt_money(precio_minimo)})."
+            row = cur.fetchone()
+            if not row:
+                raise ValueError(f"Producto '{producto}' no existe.")
+            stock_actual, precio_base, precio_minimo = row["cantidad"], row["precio_base"], row["precio_minimo_venta"]
+            if cantidad > stock_actual:
+                raise ValueError(
+                    f"Stock insuficiente: {stock_actual} disponible, se solicitaron {cantidad}."
+                )
+            if precio_vendido < precio_minimo:
+                raise ValueError(
+                    f"Precio de venta menor al mínimo permitido ({_fmt_money(precio_minimo)})."
+                )
+            subtotal = precio_vendido * cantidad
+            if estado_pago == "DEBE":
+                saldo = subtotal
+            elif estado_pago == "PAGO":
+                saldo = 0.0
+            else:  # PARCIAL
+                if not (0 < abono < subtotal):
+                    raise ValueError("El abono debe ser >0 y < subtotal.")
+                saldo = subtotal - abono
+            # Insertar venta (incluyendo método de pago)
+            cur.execute(
+                """
+                INSERT INTO ventas_pedidos
+                (cliente, producto, cantidad, precio_vendido, subtotal,
+                 estado_pago, saldo_pendiente, fecha, metodo_pago)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                """,
+                (
+                    cliente,
+                    producto,
+                    cantidad,
+                    precio_vendido,
+                    subtotal,
+                    estado_pago,
+                    saldo,
+                    datetime.datetime.now(),
+                    metodo_pago,
+                ),
             )
-        subtotal = precio_vendido * cantidad
-        if estado_pago == "DEBE":
-            saldo = subtotal
-            abono_val = 0.0
-        elif estado_pago == "PAGO":
-            saldo = 0.0
-            abono_val = subtotal
-        else:  # PARCIAL
-            if not (0 < abono < subtotal):
-                raise ValueError("El abono debe ser >0 y < subtotal.")
-            saldo = subtotal - abono
-            abono_val = abono
-        # Insertar venta
-        conn.execute(
-            """
-            INSERT INTO ventas_pedidos
-            (cliente, producto, cantidad, precio_vendido, subtotal,
-             estado_pago, saldo_pendiente, fecha)
-            VALUES (?,?,?,?,?,?,?,?)
-            """,
-            (
-                cliente,
-                producto,
-                cantidad,
-                precio_vendido,
-                subtotal,
-                estado_pago,
-                saldo,
-                datetime.datetime.now(),
-            ),
-        )
-        # Guardar método de pago
-        conn.execute(
-            "UPDATE ventas_pedidos SET metodo_pago = ? WHERE id = last_insert_rowid()",
-            (metodo_pago,),
-        )
-        # Actualizar inventario en la misma conexión
-        nuevo_stock = stock_actual - cantidad
-        nuevo_valor = nuevo_stock * precio_base
-        conn.execute(
-            """
-            UPDATE inventario
-            SET cantidad = ?, valor_total_stock = ?
-            WHERE nombre_producto = ?
-            """,
-            (nuevo_stock, nuevo_valor, producto),
-        )
+            # Actualizar inventario en la misma conexión
+            nuevo_stock = stock_actual - cantidad
+            nuevo_valor = nuevo_stock * precio_base
+            cur.execute(
+                """
+                UPDATE inventario
+                SET cantidad = %s, valor_total_stock = %s
+                WHERE nombre_producto = %s
+                """,
+                (nuevo_stock, nuevo_valor, producto)
+            )
         conn.commit()
 
 
 def query_pending_payments() -> List[Dict[str, Any]]:
     with _connect() as conn:
-        cur = conn.execute(
-            """
-            SELECT id, cliente, producto, cantidad, subtotal, saldo_pendiente
-            FROM ventas_pedidos
-            WHERE saldo_pendiente > 0
-            ORDER BY fecha ASC
-            """
-        )
-        return [dict(r) for r in cur.fetchall()]
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT id, cliente, producto, cantidad, subtotal, saldo_pendiente
+                FROM ventas_pedidos
+                WHERE saldo_pendiente > 0
+                ORDER BY fecha ASC
+                """
+            )
+            return [dict(r) for r in cur.fetchall()]
 
 
 def mark_payment_full(sale_id: int) -> None:
     with _connect() as conn:
-        conn.execute(
-            """
-            UPDATE ventas_pedidos
-            SET saldo_pendiente = 0,
-                estado_pago = 'PAGO'
-            WHERE id = ?
-            """,
-            (sale_id,),
-        )
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE ventas_pedidos
+                SET saldo_pendiente = 0,
+                    estado_pago = 'PAGO'
+                WHERE id = %s
+                """,
+                (sale_id,)
+            )
         conn.commit()
 
 
 def register_partial_payment(sale_id: int, abono: float) -> None:
     with _connect() as conn:
-        cur = conn.execute(
-            "SELECT saldo_pendiente, subtotal FROM ventas_pedidos WHERE id = ?",
-            (sale_id,),
-        )
-        row = cur.fetchone()
-        if not row:
-            raise ValueError("Venta no encontrada.")
-        if not (0 < abono <= row["saldo_pendiente"]):
-            raise ValueError("Abono inválido.")
-        nuevo_saldo = row["saldo_pendiente"] - abono
-        nuevo_estado = "PAGO" if nuevo_saldo == 0 else "PARCIAL"
-        conn.execute(
-            """
-            UPDATE ventas_pedidos
-            SET saldo_pendiente = ?, estado_pago = ?
-            WHERE id = ?
-            """,
-            (nuevo_saldo, nuevo_estado, sale_id),
-        )
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT saldo_pendiente, subtotal FROM ventas_pedidos WHERE id = %s",
+                (sale_id,)
+            )
+            row = cur.fetchone()
+            if not row:
+                raise ValueError("Venta no encontrada.")
+            if not (0 < abono <= row["saldo_pendiente"]):
+                raise ValueError("Abono inválido.")
+            nuevo_saldo = row["saldo_pendiente"] - abono
+            nuevo_estado = "PAGO" if nuevo_saldo == 0 else "PARCIAL"
+            cur.execute(
+                """
+                UPDATE ventas_pedidos
+                SET saldo_pendiente = %s, estado_pago = %s
+                WHERE id = %s
+                """,
+                (nuevo_saldo, nuevo_estado, sale_id)
+            )
         conn.commit()
 
 # ----------------------------------------------------------------------
@@ -326,21 +293,23 @@ def register_partial_payment(sale_id: int, abono: float) -> None:
 # ----------------------------------------------------------------------
 def record_expense(tipo: str, descripcion: str, monto: float) -> None:
     with _connect() as conn:
-        conn.execute(
-            """
-            INSERT INTO gastos (tipo, descripcion, monto, fecha)
-            VALUES (?,?,?,?)
-            """,
-            (tipo, descripcion, monto, datetime.datetime.now()),
-        )
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO gastos (tipo, descripcion, monto, fecha)
+                VALUES (%s,%s,%s,%s)
+                """,
+                (tipo, descripcion, monto, datetime.datetime.now()),
+            )
         conn.commit()
 
 def list_expenses() -> List[Dict[str, Any]]:
     with _connect() as conn:
-        cur = conn.execute(
-            "SELECT id, tipo, descripcion, monto, fecha FROM gastos ORDER BY fecha DESC"
-        )
-        return [dict(r) for r in cur.fetchall()]
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT id, tipo, descripcion, monto, fecha FROM gastos ORDER BY fecha DESC"
+            )
+            return [dict(r) for r in cur.fetchall()]
 
 # ----------------------------------------------------------------------
 #  REPORT helper – used by reports.py
