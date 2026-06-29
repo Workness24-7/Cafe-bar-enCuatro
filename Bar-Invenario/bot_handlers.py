@@ -135,9 +135,7 @@ async def select_role(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     # Si ya hemos guardado el rol en la sesión, evitamos volver a pedir el código
     if context.user_data.get("role"):
         rol = context.user_data["role"]
-        await update.message.reply_text(
-            f"✅ Ya estás registrado como *{rol}*.", parse_mode="Markdown"
-        )
+        # Usuario ya autenticado: simplemente muestra el menú sin mensaje redundante
         await _show_main_menu(update, context, rol)
         return ADMIN_MENU if rol == "admin" else EMPLOYEE_MENU
 
