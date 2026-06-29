@@ -73,6 +73,14 @@ def create_user(id_telegram: int, nombre: str, rol: str) -> None:
             )
         conn.commit()
 
+
+def delete_user(id_telegram: int) -> None:
+    """Remove any existing user record – used when switching roles or resetting."""
+    with _connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM usuarios WHERE id_telegram = %s", (id_telegram,))
+        conn.commit()
+
 # ----------------------------------------------------------------------
 #  INVENTORY functions
 # ----------------------------------------------------------------------
