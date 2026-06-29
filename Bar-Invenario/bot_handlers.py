@@ -143,8 +143,8 @@ async def select_role(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         return SELECT_ROLE
     # Remove any previous entry for this telegram id (allows role switch)
     from config import DB_PATH
-        with sqlite3.connect(DB_PATH) as conn:
-        conn.execute("DELETE FROM usuarios WHERE id_telegram = ?", (user.id,))
+        import psycopg2, os; DATABASE_URL = os.getenv("DATABASE_URL")`n    with psycopg2.connect(DATABASE_URL) as conn:
+            with conn.cursor() as cur:`n                cur.execute("DELETE FROM usuarios WHERE id_telegram = %s", (user.id,))
         conn.commit()
     nombre = f"{user.first_name or ''} {user.last_name or ''}".strip() or "Sin nombre"
     create_user(user.id, nombre, rol)
@@ -1567,7 +1567,7 @@ async def unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def reset_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
     from config import DB_PATH
-        with sqlite3.connect(DB_PATH) as conn:
+        import psycopg2, os; DATABASE_URL = os.getenv("DATABASE_URL")`n    with psycopg2.connect(DATABASE_URL) as conn:
         conn.execute("DELETE FROM usuarios WHERE id_telegram = ?", (user_id,))
         conn.commit()
     await update.message.reply_text(
