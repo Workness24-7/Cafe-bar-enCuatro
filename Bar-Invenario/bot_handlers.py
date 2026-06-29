@@ -698,7 +698,7 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         await _show_main_menu(update, context, "admin")
         return ADMIN_MENU
 
-    if choice == "📦 Ver tabla de inventario":
+    if choice == "📦 Ver tabla de inventario" or "inventario" in choice.lower():
         # Mostrar inventario o indicar que está vacío
         inv = list_inventory()
         if not inv:
