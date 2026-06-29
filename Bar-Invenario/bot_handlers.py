@@ -132,6 +132,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return SELECT_ROLE
 
 async def select_role(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    # Si ya hemos guardado el rol en la sesión, evitamos volver a pedir el código
+    if context.user_data.get("role"):
+        rol = context.user_data["role"]
+        await update.message.reply_text(
+            f"✅ Ya estás registrado como *{rol}*.", parse_mode="Markdown"
+        )
+        await _show_main_menu(update, context, rol)
+        return ADMIN_MENU if rol == "admin" else EMPLOYEE_MENU
+
+    # Primer ingreso o cambio de rol
     code = (update.message.text or "").strip()
     user = update.effective_user
     if code == CLAVE_ACCESO_ADMIN:
@@ -143,11 +153,12 @@ async def select_role(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
             "❌ Código incorrecto. Intenta nuevamente o contacta al administrador."
         )
         return SELECT_ROLE
-    # Clean up any old SQLite user entry – not needed for PostgreSQL.
-    # The user record is now managed via PostgreSQL via `create_user`.
 
+    # Registro/actualización del usuario en PostgreSQL
     nombre = f"{user.first_name or ''} {user.last_name or ''}".strip() or "Sin nombre"
     create_user(user.id, nombre, rol)
+    # Guardamos el rol en la sesión para futuros mensajes
+    context.user_data["role"] = rol
     await update.message.reply_text(f"✅ Registro exitoso como *{rol}*.", parse_mode="Markdown")
     await _show_main_menu(update, context, rol)
     return ADMIN_MENU if rol == "admin" else EMPLOYEE_MENU
