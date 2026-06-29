@@ -22,6 +22,7 @@ from telegram.ext import (
 from db import (
     get_user,
     create_user,
+    delete_user,
     add_product,
     remove_product,
     list_inventory,
@@ -1566,13 +1567,9 @@ async def unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 # ------------------------------------------------------------
 async def reset_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
-    # Remove user record from PostgreSQL (no SQLite in this project)
-    from db import get_db_connection
-    conn = get_db_connection()
-    with conn.cursor() as cur:
-        cur.execute("DELETE FROM usuarios WHERE id_telegram = %s", (user_id,))
-    conn.commit()
-    conn.close()
+    # Remove user record from PostgreSQL (using the helper)
+    from db import delete_user
+    delete_user(user_id)
     await update.message.reply_text(
         "🔄 Registro eliminado. Usa /start para volver a ingresar el código de acceso.",
         parse_mode="Markdown",

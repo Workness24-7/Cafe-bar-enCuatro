@@ -65,11 +65,20 @@ def get_user(id_telegram: int) -> Dict[str, Any] | None:
 
 
 def create_user(id_telegram: int, nombre: str, rol: str) -> None:
+    """Insert a new user or update the role if it already exists.
+
+    PostgreSQL supports ``ON CONFLICT``; we use it to avoid duplicate‑key errors when a user
+    re‑logs with the same Telegram ID.
+    """
     with _connect() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO usuarios (id_telegram, nombre, rol) VALUES (%s,%s,%s)",
-                (id_telegram, nombre, rol)
+                """
+                INSERT INTO usuarios (id_telegram, nombre, rol)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (id_telegram) DO UPDATE SET nombre = EXCLUDED.nombre, rol = EXCLUDED.rol
+                """,
+                (id_telegram, nombre, rol),
             )
         conn.commit()
 
