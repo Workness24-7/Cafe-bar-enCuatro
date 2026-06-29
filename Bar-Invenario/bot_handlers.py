@@ -698,19 +698,17 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         await _show_main_menu(update, context, "admin")
         return ADMIN_MENU
 
-    if "inventario" in choice.lower():
+    if choice == "📦 Ver tabla de inventario":
         # Mostrar inventario o indicar que está vacío
         inv = list_inventory()
         if not inv:
-            await update.message.reply_text("🚫 Inventario vacío.")
+            await update.message.reply_text("🚫 Inventario vacío.", parse_mode="Markdown")
         else:
-            lines = ["*Inventario completo:*"]
+            # Formato: "inventario   3 Poker $ 4000 (c/u) --> $ 12000"
+            lines = []
             for i in inv:
-                lines.append(
-                    f"{i['nombre_producto']}: {i['cantidad']} uds "
-                    f"({_fmt_money(i['precio_base'])} c/u) → "
-                    f"{_fmt_money(i['valor_total_stock'])}"
-                )
+                line = f"inventario   {i['cantidad']} {i['nombre_producto']} {_fmt_money(i['precio_base'])} (c/u) --> {_fmt_money(i['valor_total_stock'])}"
+                lines.append(line)
             await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
         # No llamamos a _show_main_menu aquí; permanecemos en ADMIN_MENU
         return ADMIN_MENU
