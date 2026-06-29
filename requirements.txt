@@ -1,0 +1,5 @@
+﻿python-telegram-bot
+reportlab
+pandas
+openpyxl
+psycopg2-binary
