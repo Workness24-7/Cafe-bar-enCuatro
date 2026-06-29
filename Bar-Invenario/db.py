@@ -137,9 +137,14 @@ def get_product(nombre_producto: str) -> Dict[str, Any] | None:
 
 
 def update_stock(nombre_producto: str, delta: int) -> None:
-    """Increase (+) or decrease (-) stock and recalc valor_total_stock."""
+    """Increase (+) or decrease (-) stock.
+    The column ``valor_total_stock`` is *generated* by PostgreSQL, so we **must not
+    try to write to it**. Updating the ``cantidad`` is enough; the DB will
+    recalculate the total automatically.
+    """
     with _connect() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            # Obtener la cantidad y el precio base actuales
             cur.execute(
                 "SELECT cantidad, precio_base FROM inventario WHERE nombre_producto = %s",
                 (nombre_producto,)
@@ -147,20 +152,25 @@ def update_stock(nombre_producto: str, delta: int) -> None:
             row = cur.fetchone()
             if not row:
                 raise ValueError(f"Producto '{nombre_producto}' no encontrado.")
+
+            # Calcular la nueva cantidad
             nueva_cantidad = row["cantidad"] + delta
             if nueva_cantidad < 0:
                 raise ValueError(
-                    f"No hay suficiente stock de '{nombre_producto}'. Disponible: {row['cantidad']}"
+                    f"No hay suficiente stock de '{nombre_producto}'. "
+                    f"Disponible: {row['cantidad']}"
                 )
-            nuevo_valor = nueva_cantidad * row["precio_base"]
-            # Update row
+
+            # *** Solo actualizamos la columna ``cantidad`. La columna
+            #     ``valor_total_stock`` se mantiene como columna *GENERADA* y
+            #     PostgreSQL la actualizará automáticamente. ***
             cur.execute(
                 """
                 UPDATE inventario
-                SET cantidad = %s, valor_total_stock = %s
+                SET cantidad = %s
                 WHERE nombre_producto = %s
                 """,
-                (nueva_cantidad, nuevo_valor, nombre_producto)
+                (nueva_cantidad, nombre_producto)
             )
         conn.commit()
 
