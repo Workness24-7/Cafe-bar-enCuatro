@@ -132,14 +132,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return SELECT_ROLE
 
 async def select_role(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    # Si ya hemos guardado el rol en la sesión, evitamos volver a pedir el código
-    if context.user_data.get("role"):
-        rol = context.user_data["role"]
-        # Usuario ya autenticado: simplemente muestra el menú sin mensaje redundante
-        await _show_main_menu(update, context, rol)
-        return ADMIN_MENU if rol == "admin" else EMPLOYEE_MENU
-
-    # Primer ingreso o cambio de rol
+    # Always process the access code, allowing role switching
     code = (update.message.text or "").strip()
     user = update.effective_user
     if code == CLAVE_ACCESO_ADMIN:
@@ -155,7 +148,7 @@ async def select_role(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     # Registro/actualización del usuario en PostgreSQL
     nombre = f"{user.first_name or ''} {user.last_name or ''}".strip() or "Sin nombre"
     create_user(user.id, nombre, rol)
-    # Guardamos el rol en la sesión para futuros mensajes
+    # Guardamos el rol en la sesión (sobrescribe cualquier rol previo)
     context.user_data["role"] = rol
     await update.message.reply_text(f"✅ Registro exitoso como *{rol}*.", parse_mode="Markdown")
     await _show_main_menu(update, context, rol)
