@@ -332,6 +332,7 @@ def record_expense(tipo: str, descripcion: str, monto: float) -> None:
             )
         conn.commit()
 
+
 def list_expenses() -> List[Dict[str, Any]]:
     with _connect() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -396,3 +397,17 @@ def weekly_summary(month: int, weeks: List[int]) -> Dict[str, Any]:
         "gastos": gastos_filtered,
         "totales": {"ventas": total_ventas, "gastos": total_gastos, "neto": neto},
     }
+
+# ----------------------------------------------------------------------
+#  MIGRATION / SCHEMA ADJUSTMENT
+# ----------------------------------------------------------------------
+# Si al ejecutar una venta recibes el error:
+#   column "metodo_pago" of relation "ventas_pedidos" does not exist
+# significa que la columna no está presente en la tabla.
+# Ejecuta este comando SQL **una sola vez** en tu base de datos (Railway console,
+# script de migración o cualquier cliente PostgreSQL) para crearla:
+#
+#   ALTER TABLE ventas_pedidos
+#   ADD COLUMN metodo_pago TEXT NOT NULL DEFAULT 'Desconocido';
+#
+# Con esa columna la inserción en `record_sale` funcionará sin errores.
