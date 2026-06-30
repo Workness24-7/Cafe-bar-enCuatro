@@ -50,6 +50,29 @@ def init_db() -> None:
     # No se necesita crear tablas en PostgreSQL si ya existen.
     return
 
+# Ensure required columns exist (especially metodo_pago) -------------------------------------------------
+def _ensure_schema():
+    """Create missing columns if they do not exist. Currently ensures 'metodo_pago' on ventas_pedidos."""
+    with _connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name='ventas_pedidos' AND column_name='metodo_pago'
+                    ) THEN
+                        ALTER TABLE ventas_pedidos ADD COLUMN metodo_pago TEXT NOT NULL DEFAULT 'Desconocido';
+                    END IF;
+                END $$;
+                """
+            )
+        conn.commit()
+
+# Run schema assurance at import time
+_ensure_schema()
+
 # ----------------------------------------------------------------------
 #  USER functions
 # ----------------------------------------------------------------------
