@@ -1228,6 +1228,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     log.exception("Error al registrar pago total por cliente")
         await query.answer(f"✅ Pagos totales registrados para {client} vía {method}")
         await query.message.edit_reply_markup(reply_markup=None)
+        await query.message.reply_text("✅ Pagos procesados.")
+        await _show_main_menu(update, context, "empleado")
     elif data.startswith("cobro_abono:"):
         client = data.split(":", 1)[1]
         await query.answer()
@@ -1570,6 +1572,7 @@ async def unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 await update.message.reply_text(
                     f"✅ Abono de {_fmt_money(monto)} registrado para {applied} venta(s) del cliente {client}."
                 )
+                await _show_main_menu(update, context, "empleado")
             except Exception as e:
                 log.exception("Error al registrar abono del cliente")
                 await update.message.reply_text(f"❌ Error al registrar abono: {e}")
@@ -1581,6 +1584,7 @@ async def unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 method = context.user_data.pop("abono_method", "Desconocido")
                 register_partial_payment(sale_id, monto, metodo_pago=method)
                 await update.message.reply_text("✅ Abono registrado.")
+                await _show_main_menu(update, context, "empleado")
             except Exception as e:
                 log.exception("Error al registrar abono")
                 await update.message.reply_text(f"❌ Error: {e}")
