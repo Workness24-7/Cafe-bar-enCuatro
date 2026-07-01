@@ -166,7 +166,7 @@ async def _show_main_menu(
             "🗂️ Módulo de reportes",
             "🔙 Salir",
         ]
-        await update.message.reply_text(
+        await update.effective_message.reply_text(
             "🛠️ *Menú Administrador*",
             reply_markup=_mk_keyboard(options),
             parse_mode="Markdown",
@@ -179,7 +179,7 @@ async def _show_main_menu(
             "📦 Consultar inventario",
             "🔙 Salir",
         ]
-        await update.message.reply_text(
+        await update.effective_message.reply_text(
             "👤 *Menú Empleado*",
             reply_markup=_mk_keyboard(options),
             parse_mode="Markdown",
@@ -1203,7 +1203,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         keyboard = [[
             InlineKeyboardButton("💰 Pago Total", callback_data=f"cobro_pago_total:{client}"),
             InlineKeyboardButton("💸 Abono", callback_data=f"cobro_abono:{client}"),
-            InlineKeyboardButton("🔙 Volver", callback_data="cobro_volver"),
         ]]
         await query.message.edit_text("\n".join(lines), reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
     elif data.startswith("cobro_pago_total:"):
