@@ -81,7 +81,7 @@ _STATE_NAMES = [
     "REPOPT_TIPO",
     "REPOPT_ANO",
     "REPOPT_MES",
-    "REPOPT_SEMANAS",
+    "REPOPT_RANGO",
     "ADMIN_REGISTRO_PAGOS",
     "ADMIN_REGISTRO_PAGOS_CAT",
     "VENTA_AGREGAR_OTRO",
@@ -1032,7 +1032,16 @@ async def admin_registrar_pago_desc(update: Update, context: ContextTypes.DEFAUL
 #  ADMIN – reportes (texto / PDF)
 # ----------------------------------------------------------------------
 async def reportes_tipo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    # Primer paso: preguntar por año antes de mes
+    choice = (update.message.text or "").strip()
+    if choice == "🔙 Volver":
+        await _show_main_menu(update, context, "admin")
+        return ADMIN_MENU
+    if choice not in ("Texto", "PDF"):
+        await update.message.reply_text("❌ Elige Texto o PDF.")
+        return REPOPT_TIPO
+    if "reporte" not in context.user_data:
+        context.user_data["reporte"] = {}
+    context.user_data["reporte"]["formato"] = choice
     await update.message.reply_text(
         "📆 *Ingresa el año del reporte* (ej. 2026):",
         parse_mode="Markdown",
@@ -1058,67 +1067,30 @@ async def reportes_ano(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     return REPOPT_MES
 
 async def reportes_mes(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    # Accept "🔙 Volver" to return to admin menu
     user_input = update.message.text.strip()
     if user_input == "🔙 Volver":
         await _show_main_menu(update, context, "admin")
         return ADMIN_MENU
 
-    # Normalise month name (capitalize first letter, lower rest)
     mes = user_input.capitalize()
-    # Spanish month names mapping
     spanish_months = {
-        "Enero": 1,
-        "Febrero": 2,
-        "Marzo": 3,
-        "Abril": 4,
-        "Mayo": 5,
-        "Junio": 6,
-        "Julio": 7,
-        "Agosto": 8,
-        "Septiembre": 9,
-        "Octubre": 10,
-        "Noviembre": 11,
-        "Diciembre": 12,
+        "Enero": 1, "Febrero": 2, "Marzo": 3, "Abril": 4,
+        "Mayo": 5, "Junio": 6, "Julio": 7, "Agosto": 8,
+        "Septiembre": 9, "Octubre": 10, "Noviembre": 11, "Diciembre": 12,
     }
     if mes not in spanish_months:
         await update.message.reply_text(
             "❌ Mes no válido. Usa el nombre completo en español (Enero, Febrero, ...)."
         )
         return REPOPT_MES
-    # Store month name for later use
     context.user_data["reporte"]["mes"] = mes
-    # Generate day‑range labels for each week of the month
-    import datetime, calendar
-    month_num = spanish_months[mes]
-    year = context.user_data["reporte"]["year"]
-    # Monday of the week containing the 1st of the month
-    first_day = datetime.date(year, month_num, 1)
-    week_start = first_day - datetime.timedelta(days=first_day.weekday())
-    weeks_labels = []
-    weeks_ranges = []  # list of (start_date, end_date) tuples
-    while True:
-        week_end = week_start + datetime.timedelta(days=6)
-        weeks_labels.append(f"{week_start.day}-{week_end.day}")
-        weeks_ranges.append((week_start, week_end))
-        # Stop after the week that contains the last day of the month
-        last_day = datetime.date(year, month_num, calendar.monthrange(year, month_num)[1])
-        if week_end >= last_day:
-            break
-        week_start += datetime.timedelta(days=7)
-    # Save the ranges for later filtering (store as date objects)
-    context.user_data["reporte"]["weeks_ranges"] = weeks_ranges
+    context.user_data["reporte"]["month_num"] = spanish_months[mes]
     await update.message.reply_text(
-        "🗓️ *Selecciona una o varias semanas* (presiona los botones y confirma):",
-        reply_markup=InlineKeyboardMarkup(
-            [
-                [InlineKeyboardButton(w, callback_data=f"semana:{i+1}") for i, w in enumerate(weeks_labels)],
-                [InlineKeyboardButton("🔙 Volver", callback_data="semana:volver")]
-                ]
-        ),
+        "📅 *Ingresa el rango de días del mes* (ej. 1-22 o 13-15):",
         parse_mode="Markdown",
+        reply_markup=_mk_keyboard(["🔙 Volver"]),
     )
-    return REPOPT_SEMANAS
+    return REPOPT_RANGO
 
 # ----------------------------------------------------------------------
 #  Inline button callbacks (payment handling, week selection, etc.)
@@ -1258,139 +1230,54 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await query.message.edit_text("💳 Selecciona el cliente:", reply_markup=InlineKeyboardMarkup([client_buttons]))
         context.user_data["awaiting_abono"] = True
 
-    elif data == "semana:confirm":
-        # Confirm weeks selection – generate report
-        try:
-            await reportes_confirm(update, context)
-        except Exception as e:
-            log.exception("Error en confirmación de reporte")
-            # Enviar mensaje de error y volver al menú de administrador sin usar _show_main_menu
-            if query and getattr(query, "message", None):
-                await query.message.reply_text("❌ Ocurrió un error al generar el reporte. Inténtalo de nuevo.")
-                await query.message.reply_text(
-                    "🗂️ *Menú Administrador*",
-                    reply_markup=_mk_keyboard([
-                        "📦 Ver tabla de inventario",
-                        "⚠️ Gestionar productos",
-                        "💰 Control de deudores general",
-                        "💳 Registrar pagos administrativos",
-                        "🗂️ Módulo de reportes",
-                        "⏹️ Salir",
-                    ]),
-                    parse_mode="Markdown",
-                )
-            else:
-                await (update.effective_message or update.message).reply_text("❌ Ocurrió un error al generar el reporte. Inténtalo de nuevo.")
-                await (update.effective_message or update.message).reply_text(
-                    "🗂️ *Menú Administrador*",
-                    reply_markup=_mk_keyboard([
-                        "📦 Ver tabla de inventario",
-                        "⚠️ Gestionar productos",
-                        "💰 Control de deudores general",
-                        "💳 Registrar pagos administrativos",
-                        "🗂️ Módulo de reportes",
-                        "⏹️ Salir",
-                    ]),
-                    parse_mode="Markdown",
-                )
-    elif data.startswith("semana:"):
-        # Week selection logic – handled by a helper below
-        new_state = await reportes_semanas_callback(update, context)
-        if new_state:
-            return new_state
-
     else:
         await query.answer("❓ Acción no reconocida.", show_alert=True)
 
-# Helper for week selection (toggle weeks and confirm)
-async def reportes_semanas_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # Guard against missing callback_query (e.g., when user presses a reply‑keyboard "Volver")
-    if not update.callback_query:
-        # Return to the report type selection sub‑menu
+# ----------------------------------------------------------------------
+#  ADMIN – rango de días personalizado
+# ----------------------------------------------------------------------
+async def reportes_rango(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    text = (update.message.text or "").strip()
+    if text == "🔙 Volver":
+        await update.message.reply_text(
+            "¿Qué formato deseas?",
+            reply_markup=_mk_keyboard(["Texto", "PDF", "🔙 Volver"]),
+        )
         return REPOPT_TIPO
-    query = update.callback_query
-    if query:
-        await query.answer()
-    else:
-        # No callback query (possible direct message), nothing to answer
-        pass
-    data = query.data
-    if data == "semana:volver":
-        await query.edit_message_text("🔙 Volviendo al tipo de reporte.", parse_mode="Markdown")
-        return REPOPT_TIPO
-    if not data.startswith("semana:"):
-        return
-    week_num = int(data.split(":")[1])
-    weeks = context.user_data.get("reporte_semanas", [])
-    if week_num in weeks:
-        weeks.remove(week_num)
-    else:
-        weeks.append(week_num)
-    context.user_data["reporte_semanas"] = weeks
-    sel = ", ".join(str(w) for w in sorted(weeks)) if weeks else "ninguna"
-    # Build new inline keyboard (weeks + confirm button)
-    week_buttons = [
-        InlineKeyboardButton(f"Semana {i+1}", callback_data=f"semana:{i+1}")
-        for i in range(4)
-    ]
-    confirm = InlineKeyboardButton("✅ Confirmar", callback_data="semana:confirm")
-    # Calcular los rangos de días para las semanas seleccionadas
-    week_ranges = []
-    for w in weeks:
-        start, end = context.user_data.get("reporte", {}).get("weeks_ranges", [])[w-1]
-        week_ranges.append(f"{start}-{end}")
-    dias_text = ", ".join(week_ranges) if week_ranges else ""
-    await query.edit_message_text(
-        f"🗓️ Semanas seleccionadas: {sel}\n"
-        f"Días seleccionados: {dias_text}\n"
-        "Presiona más semanas o ✅ *Confirmar* cuando termines.",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup([week_buttons, [confirm]]),
-    )
+
+    m = re.match(r"^(\d{1,2})\s*[-–]\s*(\d{1,2})$", text)
+    if not m:
+        await update.message.reply_text(
+            "❌ Formato inválido. Usa inicio-fin, ej: 1-22",
+            reply_markup=_mk_keyboard(["🔙 Volver"]),
+        )
+        return REPOPT_RANGO
+
+    start_day = int(m.group(1))
+    end_day = int(m.group(2))
+    if start_day < 1 or end_day > 31 or start_day > end_day:
+        await update.message.reply_text("❌ Rango inválido (1-31, inicio ≤ fin).")
+        return REPOPT_RANGO
+
+    context.user_data["reporte"]["start_day"] = start_day
+    context.user_data["reporte"]["end_day"] = end_day
+    await reportes_confirm(update, context)
+    return ADMIN_MENU
 
 async def reportes_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Genera y envía el reporte en texto (fecha, producto y total por producto)."""
-    query = update.callback_query
-    if query:
-        await query.answer()
-    else:
-        # No callback query (possible direct message), nothing to answer
-        pass
-    sel_weeks = context.user_data.get("reporte_semanas", [])
-    if not sel_weeks:
-        if query:
-            await query.edit_message_text("⚠️ Debes seleccionar al menos una semana.")
-        else:
-            await update.message.reply_text("⚠️ Debes seleccionar al menos una semana.")
-        return REPOPT_SEMANAS
     rpt = context.user_data["reporte"]
     mes = rpt["mes"]
-    month_num = SPANISH_MONTHS.get(mes)
-    if not month_num:
-        await query.edit_message_text("❌ Mes no reconocido para el reporte.")
-        return REPOPT_MES
-    weeks_ranges = rpt.get("weeks_ranges", [])
-    selected_ranges = [weeks_ranges[i-1] for i in sel_weeks if i-1 < len(weeks_ranges)]
-    # Mostrar los rangos de días seleccionados antes de generar el reporte
-    dias_seleccionados = []
-    for start, end in selected_ranges:
-        dias_seleccionados.append(f"{start}-{end}")
-    if dias_seleccionados:
-        await query.edit_message_text(
-            f"📅 Días seleccionados para el reporte: {', '.join(dias_seleccionados)}",
-            parse_mode="Markdown",
-        )
-    def in_selected(day):
-        # ``selected_ranges`` may contain ``datetime.date`` objects (from reportes_mes) or plain ints.
-        # Convert to day numbers before comparison.
-        def to_day(val):
-            return val.day if isinstance(val, datetime.date) else val
-        return any(to_day(start) <= day <= to_day(end) for start, end in selected_ranges)
+    month_num = rpt.get("month_num")
+    start_day = rpt.get("start_day")
+    end_day = rpt.get("end_day")
+    if not all([month_num, start_day, end_day]):
+        await update.effective_message.reply_text("❌ Faltan datos del reporte.")
+        return ADMIN_MENU
     # Consultas DB (PostgreSQL)
     from db import _connect
     from psycopg2.extras import RealDictCursor
     conn = _connect()
-    # Ventas agrupadas por fecha y producto
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
@@ -1404,7 +1291,6 @@ async def reportes_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             (month_num,)
         )
         ventas = [dict(r) for r in cur.fetchall()]
-    # Gastos del mes
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             "SELECT fecha, descripcion, monto FROM gastos WHERE EXTRACT(MONTH FROM fecha) = %s",
@@ -1412,9 +1298,9 @@ async def reportes_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         )
         gastos = [dict(r) for r in cur.fetchall()]
     conn.close()
-    # Filtrar por rangos de día seleccionados
-    ventas_filtradas = [v for v in ventas if in_selected(v["fecha"].day)]
-    gastos_filtrados = [g for g in gastos if in_selected(g["fecha"].day)]
+    # Filtrar por rango de días
+    ventas_filtradas = [v for v in ventas if start_day <= v["fecha"].day <= end_day]
+    gastos_filtrados = [g for g in gastos if start_day <= g["fecha"].day <= end_day]
     # Consolidar filas duplicadas (misma fecha y mismo producto)
     consolidated = {}
     for v in ventas_filtradas:
@@ -1430,16 +1316,15 @@ async def reportes_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             consolidated[key]["cantidad"] += v["cantidad"]
             consolidated[key]["total"] += v["total"]
     ventas_filtradas = list(consolidated.values())
-    gastos_filtrados = [g for g in gastos if in_selected(g["fecha"].day)]
     # Formatear reporte
     def _fmt_money(value: float) -> str:
         if FORMATO_MILES:
             return f"{SIGNO_MONEDA}{int(value):,}".replace(",", ".")
         return f"{SIGNO_MONEDA}{value:.2f}"
     lines = [
-        f"📊 *Reporte semanal – {NOMBRE_NEGOCIO}*",
+        f"📊 *Reporte – {NOMBRE_NEGOCIO}*",
         f"*Mes:* {mes}",
-        f"*Semanas:* {', '.join(str(w) for w in sel_weeks)}",
+        f"*Rango:* {start_day} al {end_day}",
         "",
         "*Ventas (fecha, producto, cantidad, total)*",
         "----------------------------",
@@ -1447,22 +1332,6 @@ async def reportes_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if not ventas_filtradas:
         lines.append("_Sin ventas en el periodo seleccionado_")
     else:
-        # Convertir fechas a objetos datetime (si vienen como string)
-        for v in ventas_filtradas:
-            if isinstance(v["fecha"], str):
-                try:
-                    v["fecha"] = datetime.datetime.fromisoformat(v["fecha"])
-                except Exception:
-                    # fallback: parse common SQLite datetime format
-                    v["fecha"] = datetime.datetime.strptime(v["fecha"], "%Y-%m-%d %H:%M:%S")
-        for g in gastos_filtrados:
-            if isinstance(g["fecha"], str):
-                try:
-                    g["fecha"] = datetime.datetime.fromisoformat(g["fecha"])
-                except Exception:
-                    g["fecha"] = datetime.datetime.strptime(g["fecha"], "%Y-%m-%d %H:%M:%S")
-        # Ordenar y formatear líneas de ventas sin guiones, solo espacios
-        # Consolidar por día y producto (suma de todas las ventas del día por producto)
         daily_product = {}
         for v in ventas_filtradas:
             date_key = v["fecha"].date() if hasattr(v["fecha"], "date") else v["fecha"]
@@ -1498,42 +1367,9 @@ async def reportes_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         f"Gastos: {_fmt_money(total_gastos)}",
         f"🟢 *Neto*: {_fmt_money(neto)}",
     ])
-    # Enviar el reporte al usuario; si el callback query no tiene mensaje asociado, usar el mensaje efectivo
-    if query and getattr(query, "message", None):
-        await query.message.reply_text("\n".join(lines), parse_mode="Markdown")
-    else:
-        # fallback al mensaje que disparó la interacción (por ejemplo, un mensaje de texto)
-        await (update.effective_message or update.message).reply_text("\n".join(lines), parse_mode="Markdown")
-    # Clean temporary data
+    await update.effective_message.reply_text("\n".join(lines), parse_mode="Markdown")
     context.user_data.pop("reporte", None)
-    context.user_data.pop("reporte_semanas", None)
-    # Después de enviar el reporte mostrar el menú de administrador y volver al estado correspondiente
-    if query and getattr(query, "message", None):
-        await query.message.reply_text(
-            "📠 *Menú Administrador*",
-            reply_markup=_mk_keyboard([
-                "📦 Ver tabla de inventario",
-                "⚠️ Gestionar productos",
-                "💰 Control de deudores general",
-                "💸 Registrar pagos administrativos",
-                "📂 Módulo de reportes",
-                "⏩ Salir",
-            ]),
-            parse_mode="Markdown",
-        )
-    else:
-        await update.message.reply_text(
-            "📠 *Menú Administrador*",
-            reply_markup=_mk_keyboard([
-                "📦 Ver tabla de inventario",
-                "⚠️ Gestionar productos",
-                "💰 Control de deudores general",
-                "💸 Registrar pagos administrativos",
-                "📂 Módulo de reportes",
-                "⏩ Salir",
-            ]),
-            parse_mode="Markdown",
-        )
+    await _show_main_menu(update, context, "admin")
     return ADMIN_MENU
 # ----------------------------------------------------------------------
 #  Fallback for unexpected messages (including pending partial payment amount)

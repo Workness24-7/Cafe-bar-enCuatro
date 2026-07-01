@@ -42,9 +42,8 @@ from bot_handlers import (
     admin_eliminar_stock_cant,
     reportes_tipo,
     reportes_mes,
-    reportes_semanas_callback,
-    # New handler to ask for year before month selection
     reportes_ano,
+    reportes_rango,
     unknown_message,
     registrar_gasto_tipo,
     registrar_gasto_monto,
@@ -97,9 +96,8 @@ from bot_handlers import (
     ADMIN_ELIMINAR_STOCK_CANT,
     REPOPT_TIPO,
     REPOPT_MES,
-    REPOPT_SEMANAS,
+    REPOPT_RANGO,
     REPOPT_ANO,
-        reportes_semanas_callback,
     REGISTRO_GASTO_TIPO, REGISTRO_GASTO_MONTO,
 )
 
@@ -169,7 +167,7 @@ def main() -> None:
                     MessageHandler(filters.TEXT & ~filters.COMMAND, registrar_gasto_monto)
                 ],
                 REPOPT_MES: [MessageHandler(filters.TEXT & ~filters.COMMAND, reportes_mes)],
-            REPOPT_SEMANAS: [MessageHandler(filters.TEXT & ~filters.COMMAND, reportes_semanas_callback)],
+            REPOPT_RANGO: [MessageHandler(filters.TEXT & ~filters.COMMAND, reportes_rango)],
             ADMIN_REGISTRO_PAGOS: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_registrar_pago_admin)],
         ADMIN_REGISTRO_PAGOS_CAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_registrar_pago_cat)],
             ADMIN_REGISTRO_PAGOS_DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_registrar_pago_desc)],
