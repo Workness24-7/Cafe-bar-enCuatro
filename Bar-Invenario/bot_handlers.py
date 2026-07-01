@@ -1386,39 +1386,32 @@ async def reportes_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         def to_day(val):
             return val.day if isinstance(val, datetime.date) else val
         return any(to_day(start) <= day <= to_day(end) for start, end in selected_ranges)
-    # Consultas DB
+    # Consultas DB (PostgreSQL)
     from db import _connect
+    from psycopg2.extras import RealDictCursor
     conn = _connect()
     # Ventas agrupadas por fecha y producto
-    cur = conn.execute(
-        """
-        SELECT fecha, producto, SUM(cantidad) AS cantidad, SUM(subtotal) AS total
-        FROM ventas_pedidos
-        WHERE strftime('%m', fecha) = ?
-        GROUP BY fecha, producto
-        """,
-        (f"{month_num:02d}",)
-    )
-    ventas = [dict(r) for r in cur.fetchall()]
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT fecha::date AS fecha, producto,
+                   SUM(cantidad)::int AS cantidad, SUM(subtotal) AS total
+            FROM ventas_pedidos
+            WHERE EXTRACT(MONTH FROM fecha) = %s
+            GROUP BY fecha::date, producto
+            ORDER BY fecha::date, producto
+            """,
+            (month_num,)
+        )
+        ventas = [dict(r) for r in cur.fetchall()]
     # Gastos del mes
-    cur = conn.execute(
-        "SELECT fecha, descripcion, monto FROM gastos WHERE strftime('%m', fecha) = ?",
-        (f"{month_num:02d}",)
-    )
-    gastos = [dict(r) for r in cur.fetchall()]
-    # Convertir fechas a datetime si vienen como string (por seguridad)
-    for v in ventas:
-        if isinstance(v["fecha"], str):
-            try:
-                v["fecha"] = datetime.datetime.fromisoformat(v["fecha"])
-            except Exception:
-                v["fecha"] = datetime.datetime.strptime(v["fecha"], "%Y-%m-%d %H:%M:%S")
-    for g in gastos:
-        if isinstance(g["fecha"], str):
-            try:
-                g["fecha"] = datetime.datetime.fromisoformat(g["fecha"])
-            except Exception:
-                g["fecha"] = datetime.datetime.strptime(g["fecha"], "%Y-%m-%d %H:%M:%S")
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            "SELECT fecha, descripcion, monto FROM gastos WHERE EXTRACT(MONTH FROM fecha) = %s",
+            (month_num,)
+        )
+        gastos = [dict(r) for r in cur.fetchall()]
+    conn.close()
     # Filtrar por rangos de día seleccionados
     ventas_filtradas = [v for v in ventas if in_selected(v["fecha"].day)]
     gastos_filtrados = [g for g in gastos if in_selected(g["fecha"].day)]
