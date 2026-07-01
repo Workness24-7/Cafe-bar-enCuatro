@@ -306,22 +306,23 @@ def query_pending_payments() -> List[Dict[str, Any]]:
             return rows
 
 
-def mark_payment_full(sale_id: int) -> None:
+def mark_payment_full(sale_id: int, metodo_pago: str = "Desconocido") -> None:
     with _connect() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
                 UPDATE ventas_pedidos
                 SET saldo_pendiente = 0,
-                    estado_pago = 'PAGO'
+                    estado_pago = 'PAGO',
+                    metodo_pago = %s
                 WHERE id = %s
                 """,
-                (sale_id,)
+                (metodo_pago, sale_id)
             )
         conn.commit()
 
 
-def register_partial_payment(sale_id: int, abono: float) -> None:
+def register_partial_payment(sale_id: int, abono: float, metodo_pago: str = "Desconocido") -> None:
     with _connect() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
@@ -338,10 +339,10 @@ def register_partial_payment(sale_id: int, abono: float) -> None:
             cur.execute(
                 """
                 UPDATE ventas_pedidos
-                SET saldo_pendiente = %s, estado_pago = %s
+                SET saldo_pendiente = %s, estado_pago = %s, metodo_pago = %s
                 WHERE id = %s
                 """,
-                (nuevo_saldo, nuevo_estado, sale_id)
+                (nuevo_saldo, nuevo_estado, metodo_pago, sale_id)
             )
         conn.commit()
 

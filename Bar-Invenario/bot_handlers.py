@@ -1169,7 +1169,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         _, sale_id_str, method = data.split(":")
         sale_id = int(sale_id_str)
         try:
-            mark_payment_full(sale_id)
+            mark_payment_full(sale_id, metodo_pago=method)
             await query.answer(f"✅ Pago total registrado vía {method}")
         except Exception as e:
             log.exception("Error al registrar pago total")
@@ -1208,22 +1208,44 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await query.message.edit_text("\n".join(lines), reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
     elif data.startswith("cobro_pago_total:"):
         client = data.split(":", 1)[1]
+        await query.answer()
+        await query.message.reply_text(
+            f"💳 Selecciona método de pago para el pago total de *{client}*:",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("Transferencia", callback_data=f"cobro_pago_metodo:{client}:transfer"),
+                 InlineKeyboardButton("Efectivo", callback_data=f"cobro_pago_metodo:{client}:cash")]
+            ])
+        )
+    elif data.startswith("cobro_pago_metodo:"):
+        _, client, method = data.split(":", 2)
         pending = query_pending_payments()
         for p in pending:
             if p['cliente'] == client:
                 try:
-                    mark_payment_full(p['id'])
+                    mark_payment_full(p['id'], metodo_pago=method)
                 except Exception as e:
-                        log.exception("Error al registrar pago total por cliente")
-        await query.answer(f"✅ Pagos totales registrados para {client}")
+                    log.exception("Error al registrar pago total por cliente")
+        await query.answer(f"✅ Pagos totales registrados para {client} vía {method}")
         await query.message.edit_reply_markup(reply_markup=None)
     elif data.startswith("cobro_abono:"):
         client = data.split(":", 1)[1]
         await query.answer()
-        await query.message.reply_text(f"💸 Ingrese el monto de abono para {client}:", parse_mode="Markdown")
-        # Store pending client for abono amount input
+        await query.message.reply_text(
+            f"💳 Selecciona método de pago para el abono de *{client}*:",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("Transferencia", callback_data=f"cobro_abono_metodo:{client}:transfer"),
+                 InlineKeyboardButton("Efectivo", callback_data=f"cobro_abono_metodo:{client}:cash")]
+            ])
+        )
+    elif data.startswith("cobro_abono_metodo:"):
+        _, client, method = data.split(":", 2)
+        await query.answer()
         context.user_data["cobro_abono_pending"] = client
+        context.user_data["cobro_abono_metodo"] = method
         context.user_data["awaiting_abono"] = True
+        await query.message.reply_text(f"💸 Ingrese el monto de abono para {client}:", parse_mode="Markdown")
     elif data == "cobro_volver":
         # Return to client selection list
         grouped = context.user_data.get("cobro_grouped", {})
@@ -1531,6 +1553,7 @@ async def unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         # ----- Client‑wide abono (triggered from the "cobro_abono" button) -----
         if "cobro_abono_pending" in context.user_data:
             client = context.user_data.pop("cobro_abono_pending")
+            method = context.user_data.pop("cobro_abono_metodo", "Desconocido")
             try:
                 monto = float(update.message.text.strip())
                 pending = query_pending_payments()
@@ -1538,7 +1561,7 @@ async def unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 for p in pending:
                     if p["cliente"] == client:
                         try:
-                            register_partial_payment(p["id"], monto)
+                            register_partial_payment(p["id"], monto, metodo_pago=method)
                             applied += 1
                         except Exception as e:
                             log.exception(
@@ -1555,7 +1578,8 @@ async def unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             try:
                 monto = float(update.message.text.strip())
                 sale_id = context.user_data.pop("abono_pending")
-                register_partial_payment(sale_id, monto)
+                method = context.user_data.pop("abono_method", "Desconocido")
+                register_partial_payment(sale_id, monto, metodo_pago=method)
                 await update.message.reply_text("✅ Abono registrado.")
             except Exception as e:
                 log.exception("Error al registrar abono")
