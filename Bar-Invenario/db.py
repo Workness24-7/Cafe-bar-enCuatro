@@ -142,7 +142,7 @@ def remove_product(nombre_producto: str) -> None:
     with _connect() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "DELETE FROM inventario WHERE nombre_producto = %s",
+                "DELETE FROM inventario WHERE nombre_producto ILIKE %s",
                 (nombre_producto,)
             )
         conn.commit()
@@ -152,7 +152,7 @@ def get_product(nombre_producto: str) -> Dict[str, Any] | None:
     with _connect() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
-                "SELECT * FROM inventario WHERE nombre_producto = %s",
+                "SELECT * FROM inventario WHERE nombre_producto ILIKE %s",
                 (nombre_producto,)
             )
             row = cur.fetchone()
@@ -169,7 +169,7 @@ def update_stock(nombre_producto: str, delta: int) -> None:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             # Obtener la cantidad y el precio base actuales
             cur.execute(
-                "SELECT cantidad, precio_base FROM inventario WHERE nombre_producto = %s",
+                "SELECT cantidad, precio_base FROM inventario WHERE nombre_producto ILIKE %s",
                 (nombre_producto,)
             )
             row = cur.fetchone()
@@ -191,7 +191,7 @@ def update_stock(nombre_producto: str, delta: int) -> None:
                 """
                 UPDATE inventario
                 SET cantidad = %s
-                WHERE nombre_producto = %s
+                WHERE nombre_producto ILIKE %s
                 """,
                 (nueva_cantidad, nombre_producto)
             )
@@ -229,7 +229,7 @@ def record_sale(
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             # Obtener datos del producto dentro de la misma conexión
             cur.execute(
-                "SELECT cantidad, precio_base, precio_minimo_venta FROM inventario WHERE nombre_producto = %s",
+                "SELECT cantidad, precio_base, precio_minimo_venta FROM inventario WHERE nombre_producto ILIKE %s",
                 (producto,)
             )
             row = cur.fetchone()
