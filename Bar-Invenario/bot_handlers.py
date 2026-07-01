@@ -230,7 +230,7 @@ async def employee_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         # Iniciar flujo de registro de gasto recurrente: pedir descripción y monto
         context.user_data["temp_expense"] = {"tipo": "operativo_bar"}
         await update.message.reply_text("🧾 *Descripción del gasto*:", parse_mode="Markdown")
-        return ADMIN_MENU
+        return REGISTRO_GASTO_TIPO
 
     if choice == "📦 Consultar inventario":
         inv = list_inventory()
@@ -638,7 +638,7 @@ async def registrar_gasto_tipo(update: Update, context: ContextTypes.DEFAULT_TYP
     desc = (update.message.text or "").strip()
     if not desc:
         await update.message.reply_text("❌ Ingresa una descripción del gasto.")
-        return ADMIN_MENU
+        return REGISTRO_GASTO_TIPO
     # Store description and keep the default type (operativo_bar) set previously
     context.user_data["temp_expense"]["descripcion"] = desc
     await update.message.reply_text("💰 *Monto*:", parse_mode="Markdown")
@@ -672,6 +672,7 @@ async def registrar_gasto_monto(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         record_expense(exp["tipo"], exp["descripcion"], monto)
         await update.message.reply_text("✅ Gasto registrado.")
+        await _show_main_menu(update, context, "empleado")
     except Exception as e:
         log.exception("Error al registrar gasto")
         await update.message.reply_text(f"❌ Error: {e}")
