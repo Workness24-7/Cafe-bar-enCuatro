@@ -247,8 +247,12 @@ async def employee_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return EMPLOYEE_MENU
 
     if choice == "🔙 Salir":
-        await update.message.reply_text("👋 ¡Hasta luego!")
-        return ConversationHandler.END
+        await update.message.reply_text(
+            f"👋 ¡Bienvenido a {NOMBRE_NEGOCIO}!\n"
+            "Para continuar, ingresa el código de acceso que te haya sido entregado (Empleada o Patron):",
+            parse_mode="Markdown",
+        )
+        return SELECT_ROLE
 
     await update.message.reply_text("❓ Opción no reconocida.")
     return EMPLOYEE_MENU
@@ -774,8 +778,12 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         return REPOPT_TIPO
 
     if choice == "🔙 Salir":
-        await update.message.reply_text("👋 ¡Hasta luego, admin!")
-        return ConversationHandler.END
+        await update.message.reply_text(
+            f"👋 ¡Bienvenido a {NOMBRE_NEGOCIO}!\n"
+            "Para continuar, ingresa el código de acceso que te haya sido entregado (Empleada o Patron):",
+            parse_mode="Markdown",
+        )
+        return SELECT_ROLE
 
     await update.message.reply_text("❓ Opción no reconocida.")
     return ADMIN_MENU
