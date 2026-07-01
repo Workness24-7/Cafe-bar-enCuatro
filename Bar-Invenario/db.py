@@ -297,7 +297,13 @@ def query_pending_payments() -> List[Dict[str, Any]]:
                 ORDER BY fecha ASC
                 """
             )
-            return [dict(r) for r in cur.fetchall()]
+            rows = [dict(r) for r in cur.fetchall()]
+            # Convertir Decimal → float para evitar errores al sumar
+            for row in rows:
+                for key in ("subtotal", "saldo_pendiente"):
+                    if key in row and row[key] is not None:
+                        row[key] = float(row[key])
+            return rows
 
 
 def mark_payment_full(sale_id: int) -> None:
