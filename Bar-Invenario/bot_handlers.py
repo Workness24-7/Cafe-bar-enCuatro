@@ -494,6 +494,7 @@ async def _finalizar_venta(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             abono=v.get("abono", 0.0),
         )
         await update.message.reply_text("✅ Venta Registrada.")
+        await _show_main_menu(update, context, "empleado")
     except Exception as e:
         log.exception("Error al registrar venta")
         await update.message.reply_text(f"❌ Error al registrar la venta: {e}")
@@ -534,6 +535,7 @@ async def _finalizar_venta_multiple(update: Update, context: ContextTypes.DEFAUL
             abono=abono_item,
         )
     await update.message.reply_text("✅ Venta Registrada.")
+    await _show_main_menu(update, context, "empleado")
         # limpiar datos temporales
     context.user_data.pop("venta", None)
     context.user_data.pop("venta_items", None)
