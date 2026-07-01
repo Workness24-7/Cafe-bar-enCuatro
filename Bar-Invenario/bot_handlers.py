@@ -1309,20 +1309,21 @@ async def reportes_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     # Filtrar por rango de días
     ventas_filtradas = [v for v in ventas if start_day <= v["fecha"].day <= end_day]
     gastos_filtrados = [g for g in gastos if start_day <= g["fecha"].day <= end_day]
-    # Consolidar por producto (case-insensitive) sumando cantidades y totales
-    prod_consolidated = {}
+    # Consolidar por fecha + producto (case-insensitive)
+    consolidated = {}
     for v in ventas_filtradas:
-        key = v["producto"].lower()
-        if key not in prod_consolidated:
-            prod_consolidated[key] = {
+        key = (v["fecha"], v["producto"].lower())
+        if key not in consolidated:
+            consolidated[key] = {
+                "fecha": v["fecha"],
                 "producto": v["producto"],
                 "cantidad": v["cantidad"],
                 "total": v["total"],
             }
         else:
-            prod_consolidated[key]["cantidad"] += v["cantidad"]
-            prod_consolidated[key]["total"] += v["total"]
-    ventas_agrupadas = sorted(prod_consolidated.values(), key=lambda x: x["producto"].lower())
+            consolidated[key]["cantidad"] += v["cantidad"]
+            consolidated[key]["total"] += v["total"]
+    ventas_agrupadas = sorted(consolidated.values(), key=lambda x: (x["fecha"], x["producto"].lower()))
     # Formatear reporte
     def _fmt_money(value: float) -> str:
         if FORMATO_MILES:
@@ -1333,14 +1334,15 @@ async def reportes_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         f"*Mes:* {mes}",
         f"*Rango:* {start_day} al {end_day}",
         "",
-        "*Ventas (producto, cantidad, total)*",
+        "*Ventas (fecha, producto, cantidad, total)*",
         "----------------------------",
     ]
     if not ventas_agrupadas:
         lines.append("_Sin ventas en el periodo seleccionado_")
     else:
         for v in ventas_agrupadas:
-            lines.append(f"{v['cantidad']}   {v['producto']}   {_fmt_money(v['total'])}")
+            fecha_str = v["fecha"].strftime("%d/%m") if hasattr(v["fecha"], "strftime") else str(v["fecha"])
+            lines.append(f"{fecha_str}\t{v['cantidad']}\t{v['producto']}\t{_fmt_money(v['total'])}")
     lines.extend([
         "",
         "*Gastos*",
@@ -1352,16 +1354,16 @@ async def reportes_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         for g in sorted(gastos_filtrados, key=lambda x: x["fecha"]):
             fecha = g["fecha"].strftime("%d/%m")
             desc = g.get('descripcion') or g.get('tipo')
-            lines.append(f"{fecha}   {desc}:   {_fmt_money(g['monto'])}")
+            lines.append(f"{fecha}\t{desc}:\t{_fmt_money(g['monto'])}")
     total_ventas = sum(v["total"] for v in ventas_agrupadas)
     total_gastos = sum(g["monto"] for g in gastos_filtrados)
     neto = total_ventas - total_gastos
     lines.extend([
         "",
         "*TOTALES*",
-        f"Ventas:   {_fmt_money(total_ventas)}",
-        f"Gastos:   {_fmt_money(total_gastos)}",
-        f"🟢 Neto:   {_fmt_money(neto)}",
+        f"Ventas:\t{_fmt_money(total_ventas)}",
+        f"Gastos:\t{_fmt_money(total_gastos)}",
+        f"🟢 Neto:\t{_fmt_money(neto)}",
     ])
     await update.effective_message.reply_text("\n".join(lines), parse_mode="Markdown")
     context.user_data.pop("reporte", None)
