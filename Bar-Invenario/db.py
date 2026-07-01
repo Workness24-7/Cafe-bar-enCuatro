@@ -275,14 +275,13 @@ def record_sale(
             )
             # Actualizar inventario en la misma conexión
             nuevo_stock = stock_actual - cantidad
-            nuevo_valor = nuevo_stock * precio_base
             cur.execute(
                 """
                 UPDATE inventario
-                SET cantidad = %s, valor_total_stock = %s
+                SET cantidad = %s
                 WHERE nombre_producto = %s
                 """,
-                (nuevo_stock, nuevo_valor, producto)
+                (nuevo_stock, producto)
             )
         conn.commit()
 
